@@ -4,23 +4,25 @@ import pandas as pd
 import plotly.graph_objects as go
 import plotly.express as px
 
-# =====================================================
+# ======================================================
 # PAGE CONFIG
-# =====================================================
-st.set_page_config(layout="wide", page_title="IPL Win Predictor")
+# ======================================================
+st.set_page_config(
+    page_title="IPL Win Predictor",
+    layout="wide"
+)
 
-# =====================================================
-# MODERN DARK UI
-# =====================================================
+# ======================================================
+# DARK MODERN UI
+# ======================================================
 st.markdown("""
 <style>
-
 .main {
     background: linear-gradient(135deg,#0b0f14,#111827,#1f2937);
 }
 
 .card {
-    background: rgba(255,255,255,0.06);
+    background: rgba(255,255,255,0.05);
     backdrop-filter: blur(12px);
     padding: 20px;
     border-radius: 18px;
@@ -37,15 +39,18 @@ st.markdown("""
     font-weight:bold;
     color:#ff4b4b;
 }
-
 </style>
 """, unsafe_allow_html=True)
 
-# =====================================================
+
+# ======================================================
 # LOAD MODEL
-# =====================================================
+# ======================================================
 pipe = pickle.load(open("pipe.pkl", "rb"))
 
+# ======================================================
+# CONSTANTS
+# ======================================================
 teams = [
     'Sunrisers Hyderabad','Mumbai Indians','Royal Challengers Bangalore',
     'Kolkata Knight Riders','Kings XI Punjab','Chennai Super Kings',
@@ -59,14 +64,15 @@ cities = [
 
 st.title("🏏 IPL Win Probability Predictor")
 
-# =====================================================
+# ======================================================
 # LAYOUT
-# =====================================================
+# ======================================================
 left, right = st.columns([1, 2])
 
-# =====================================================
-# LEFT SIDE (INPUTS)
-# =====================================================
+
+# ======================================================
+# INPUT PANEL
+# ======================================================
 with left:
 
     st.markdown('<div class="card">', unsafe_allow_html=True)
@@ -75,27 +81,31 @@ with left:
 
     batting = st.selectbox("Batting Team", teams)
 
-    bowling_options = [t for t in teams if t != batting]
-    bowling = st.selectbox("Bowling Team", bowling_options)
+    # prevent same team
+    bowling = st.selectbox(
+        "Bowling Team",
+        [t for t in teams if t != batting]
+    )
 
     target = st.slider("Target Score", 100, 250, 180)
     score = st.slider("Current Score", 0, target, 80)
     overs = st.slider("Overs Completed", 0.1, 19.5, 10.0, step=0.1)
     wickets = st.slider("Wickets Fallen", 0, 9)
 
-    predict = st.button("🚀 Predict")
+    predict = st.button("🚀 Predict Win Probability")
 
     st.markdown('</div>', unsafe_allow_html=True)
 
-# =====================================================
-# RIGHT SIDE (RESULTS)
-# =====================================================
+
+# ======================================================
+# RESULT PANEL
+# ======================================================
 with right:
 
     if predict:
 
         # -------------------------
-        # Calculations
+        # CALCULATIONS
         # -------------------------
         runs_left = target - score
         balls_left = 120 - int(overs * 6)
@@ -104,38 +114,30 @@ with right:
         crr = score / overs
         rrr = (runs_left * 6) / balls_left if balls_left > 0 else 0
 
-        # =====================================================
-        # ⭐ CRITICAL PART (STRICT TRAINING ORDER)
-        # DO NOT CHANGE ORDER
-        # =====================================================
-        columns = [
-            'batting_team',
-            'bowling_team',
-            'city',
-            'runs_left',
-            'balls_left',
-            'wickets',
-            'total_runs_x',
-            'crr',
-            'rrr'
-        ]
+        # ======================================================
+        # ⭐ BULLETPROOF COLUMN MATCH
+        # ======================================================
+        expected_cols = pipe.feature_names_in_
 
-        values = [[
-            batting,
-            bowling,
-            city,
-            runs_left,
-            balls_left,
-            wickets_left,
-            target,
-            crr,
-            rrr
-        ]]
+        row = {
+            'batting_team': batting,
+            'bowling_team': bowling,
+            'city': city,
+            'runs_left': runs_left,
+            'balls_left': balls_left,
+            'wickets': wickets_left,
+            'total_runs_x': target,
+            'crr': crr,
+            'rrr': rrr
+        }
 
-        df = pd.DataFrame(values, columns=columns)
+        df = pd.DataFrame([row])
+
+        # FORCE EXACT TRAINING STRUCTURE
+        df = df.reindex(columns=expected_cols)
 
         # -------------------------
-        # Prediction
+        # PREDICTION
         # -------------------------
         prob = pipe.predict_proba(df)
 
@@ -143,21 +145,21 @@ with right:
         lose = prob[0][0]
 
         # -------------------------
-        # Result Text
+        # RESULT TEXT
         # -------------------------
         if win > lose:
             st.markdown(
-                f'<p class="win">{batting} Win Chance {round(win*100,2)}%</p>',
+                f'<p class="win">{batting} → {round(win*100,2)}%</p>',
                 unsafe_allow_html=True
             )
         else:
             st.markdown(
-                f'<p class="lose">{bowling} Win Chance {round(lose*100,2)}%</p>',
+                f'<p class="lose">{bowling} → {round(lose*100,2)}%</p>',
                 unsafe_allow_html=True
             )
 
         # -------------------------
-        # Gauge Chart
+        # GAUGE CHART
         # -------------------------
         fig = go.Figure(go.Indicator(
             mode="gauge+number",
@@ -172,7 +174,7 @@ with right:
         st.plotly_chart(fig, use_container_width=True)
 
         # -------------------------
-        # Stats Cards
+        # STATS
         # -------------------------
         c1, c2, c3, c4 = st.columns(4)
 
@@ -182,7 +184,7 @@ with right:
         c4.metric("RRR", round(rrr, 2))
 
         # -------------------------
-        # Score Projection Chart
+        # SCORE PROJECTION GRAPH
         # -------------------------
         overs_list = list(range(1, 21))
         projection = [score + i * crr for i in overs_list]
@@ -191,7 +193,7 @@ with right:
             x=overs_list,
             y=projection,
             labels={"x": "Overs", "y": "Projected Score"},
-            title="Score Projection"
+            title="Projected Score Curve"
         )
 
         st.plotly_chart(fig2, use_container_width=True)
