@@ -1,26 +1,37 @@
-# train_model.py
+# ======================================================
+# TRAIN MODEL (runs automatically on Streamlit Cloud)
+# ======================================================
+
 import pandas as pd
 import numpy as np
-import joblib
+import pickle
 
 from sklearn.compose import ColumnTransformer
 from sklearn.preprocessing import OneHotEncoder
 from sklearn.pipeline import Pipeline
 from sklearn.impute import SimpleImputer
 from sklearn.ensemble import RandomForestClassifier
-from sklearn.metrics import accuracy_score
 from sklearn.model_selection import GroupShuffleSplit
+from sklearn.metrics import accuracy_score
 
 
-print("Loading data...")
+print("Training model on server...")
 
 matches = pd.read_csv("matches.csv")
 deliveries = pd.read_csv("deliveries.csv")
 
 
-# TARGET SCORE
-total_score_df = deliveries.groupby(['match_id','inning'])['total_runs'].sum().reset_index()
-total_score_df = total_score_df[total_score_df['inning']==1]
+# ==============================
+# FIRST INNINGS TARGET
+# ==============================
+total_score_df = (
+    deliveries.groupby(['match_id','inning'])['total_runs']
+    .sum()
+    .reset_index()
+)
+
+total_score_df = total_score_df[total_score_df['inning'] == 1]
+
 
 match_df = matches.merge(
     total_score_df[['match_id','total_runs']],
@@ -28,13 +39,38 @@ match_df = matches.merge(
     right_on='match_id'
 )
 
+
+# ==============================
+# CLEAN TEAMS
+# ==============================
+match_df['team1'] = match_df['team1'].str.replace('Delhi Daredevils','Delhi Capitals')
+match_df['team2'] = match_df['team2'].str.replace('Delhi Daredevils','Delhi Capitals')
+
+teams = [
+    'Sunrisers Hyderabad','Mumbai Indians','Royal Challengers Bangalore',
+    'Kolkata Knight Riders','Kings XI Punjab','Chennai Super Kings',
+    'Rajasthan Royals','Delhi Capitals'
+]
+
+match_df = match_df[
+    (match_df['team1'].isin(teams)) &
+    (match_df['team2'].isin(teams)) &
+    (match_df['dl_applied'] == 0)
+]
+
 match_df = match_df[['match_id','city','winner','total_runs']]
 
-delivery_df = match_df.merge(deliveries,on='match_id')
-delivery_df = delivery_df[delivery_df['inning']==2].copy()
+
+# ==============================
+# MERGE
+# ==============================
+delivery_df = match_df.merge(deliveries, on='match_id')
+delivery_df = delivery_df[delivery_df['inning'] == 2].copy()
 
 
+# ==============================
 # FEATURES
+# ==============================
 delivery_df['current_score'] = delivery_df.groupby('match_id')['total_runs_y'].cumsum()
 delivery_df['runs_left'] = delivery_df['total_runs_x'] - delivery_df['current_score']
 delivery_df['balls_left'] = 120 - (delivery_df['over']*6 + delivery_df['ball'])
@@ -46,46 +82,50 @@ delivery_df['wickets'] = 10 - wickets
 delivery_df['crr'] = delivery_df['current_score']*6 / np.maximum(120-delivery_df['balls_left'],1)
 delivery_df['rrr'] = delivery_df['runs_left']*6 / np.maximum(delivery_df['balls_left'],1)
 
-delivery_df['result'] = (delivery_df['batting_team']==delivery_df['winner']).astype(int)
+delivery_df['pressure'] = delivery_df['rrr'] - delivery_df['crr']
+delivery_df['runs_per_wicket'] = delivery_df['runs_left'] / np.maximum(delivery_df['wickets'],1)
+
+delivery_df['result'] = (delivery_df['batting_team'] == delivery_df['winner']).astype(int)
 
 
 final_df = delivery_df[
     ['match_id','batting_team','bowling_team','city',
-     'runs_left','balls_left','wickets','total_runs_x','crr','rrr','result']
+     'runs_left','balls_left','wickets','total_runs_x',
+     'crr','rrr','pressure','runs_per_wicket','result']
 ].dropna()
 
-X = final_df.drop('result',axis=1)
-y = final_df['result']
 
+X = final_df.drop(['result'], axis=1)
+y = final_df['result']
 groups = final_df['match_id']
 
-gss = GroupShuffleSplit(test_size=0.2,random_state=42)
-train_idx,test_idx = next(gss.split(X,y,groups))
+gss = GroupShuffleSplit(test_size=0.2, n_splits=1, random_state=42)
+train_idx, test_idx = next(gss.split(X, y, groups))
 
-X_train = X.iloc[train_idx].drop('match_id',axis=1)
-X_test  = X.iloc[test_idx].drop('match_id',axis=1)
+X_train = X.iloc[train_idx].drop('match_id', axis=1)
+X_test  = X.iloc[test_idx].drop('match_id', axis=1)
 y_train = y.iloc[train_idx]
 y_test  = y.iloc[test_idx]
 
 
 categorical = ['batting_team','bowling_team','city']
-numeric = ['runs_left','balls_left','wickets','total_runs_x','crr','rrr']
+numeric = ['runs_left','balls_left','wickets','total_runs_x','crr','rrr','pressure','runs_per_wicket']
 
-pipe = Pipeline([
-    ('prep', ColumnTransformer([
-        ('cat', OneHotEncoder(handle_unknown='ignore'), categorical),
-        ('num', SimpleImputer(strategy='constant', fill_value=0), numeric)
-    ])),
-    ('model', RandomForestClassifier(n_estimators=200, random_state=42))
+pre = ColumnTransformer([
+    ('cat', OneHotEncoder(handle_unknown='ignore'), categorical),
+    ('num', SimpleImputer(strategy='constant', fill_value=0), numeric)
 ])
 
+pipe = Pipeline([
+    ('prep', pre),
+    ('model', RandomForestClassifier(n_estimators=200))
+])
 
-print("Training...")
-pipe.fit(X_train,y_train)
+pipe.fit(X_train, y_train)
 
-print("Accuracy:", accuracy_score(y_test, pipe.predict(X_test)))
+pred = pipe.predict(X_test)
+print("Accuracy:", accuracy_score(y_test, pred))
 
-# ⭐ use joblib (smaller + safer)
-joblib.dump(pipe,"pipe.pkl",compress=3)
 
-print("pipe.pkl saved!")
+pickle.dump(pipe, open("pipe.pkl", "wb"))
+print("pipe.pkl saved successfully!")
