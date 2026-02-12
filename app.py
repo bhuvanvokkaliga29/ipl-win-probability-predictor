@@ -4,6 +4,7 @@ import pandas as pd
 import numpy as np
 import plotly.graph_objects as go
 import plotly.express as px
+import os
 import time
 
 # ======================================================
@@ -15,7 +16,7 @@ st.set_page_config(
 )
 
 # ======================================================
-# PREMIUM ANIMATED UI
+# DARK PREMIUM UI
 # ======================================================
 st.markdown("""
 <style>
@@ -25,33 +26,30 @@ st.markdown("""
     color: white;
 }
 
-/* Card */
 .card {
     background: rgba(255,255,255,0.06);
-    backdrop-filter: blur(16px);
+    backdrop-filter: blur(18px);
     padding: 25px;
     border-radius: 20px;
-    box-shadow: 0 0 20px rgba(0,255,150,0.08);
+    box-shadow: 0 0 25px rgba(0,255,150,0.1);
 }
 
-/* Winner text */
 .win {
     font-size:48px;
-    font-weight:800;
+    font-weight:900;
     color:#00ff9f;
     text-align:center;
 }
 
 .lose {
     font-size:48px;
-    font-weight:800;
+    font-weight:900;
     color:#ff4b4b;
     text-align:center;
 }
 
-/* Smooth animation */
 .fade {
-    animation: fadein 1s ease-in;
+    animation: fadein 0.8s ease-in;
 }
 
 @keyframes fadein {
@@ -62,12 +60,10 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-
 # ======================================================
-# LOAD MODEL
+# LOAD MODEL (Safe)
 # ======================================================
-pipe = pickle.load(open("pipe.pkl","rb"))
-
+pipe = pickle.load(open("pipe.pkl", "rb"))
 
 # ======================================================
 # CONSTANTS
@@ -83,19 +79,13 @@ cities = [
     'Kolkata','Jaipur','Mohali','Ahmedabad','Pune'
 ]
 
-
 # ======================================================
-# TITLE (NO LOGO, CLEAN)
+# TITLE
 # ======================================================
 st.markdown("# 🏏 IPL Win Probability Predictor")
 st.markdown("---")
 
-
-# ======================================================
-# LAYOUT
-# ======================================================
 left, right = st.columns([1,2])
-
 
 # ======================================================
 # INPUT PANEL
@@ -104,27 +94,29 @@ with left:
 
     st.markdown('<div class="card">', unsafe_allow_html=True)
 
-    city = st.selectbox("Host City", cities)
+    city = st.selectbox("🏟 Host City", cities)
 
-    batting = st.selectbox("Batting Team", teams)
+    batting = st.selectbox("🏏 Batting Team", teams)
 
     bowling = st.selectbox(
-        "Bowling Team",
+        "🎯 Bowling Team",
         [t for t in teams if t != batting]
     )
 
-    target = st.slider("Target", 100, 250, 180)
+    target = st.slider("🎯 Target Score", 100, 250, 180)
+    score = st.slider("🏃 Current Score", 0, target, 80)
 
-    score = st.slider("Current Score", 0, target, 80)
+    # ==============================
+    # CORRECT CRICKET OVERS LOGIC
+    # ==============================
+    overs_completed = st.slider("Overs Completed", 0, 19, 10)
+    balls_in_over = st.slider("Balls in Current Over", 0, 5, 0)
 
-    overs = st.slider("Overs", 0.1, 19.5, 10.0, step=0.1)
+    wickets = st.slider("❌ Wickets Fallen", 0, 9)
 
-    wickets = st.slider("Wickets Fallen", 0, 9)
-
-    predict = st.button("🚀 Predict")
+    predict = st.button("🚀 Predict Win Probability")
 
     st.markdown('</div>', unsafe_allow_html=True)
-
 
 # ======================================================
 # RESULT PANEL
@@ -133,17 +125,21 @@ with right:
 
     if predict:
 
-        # -------------------------
-        # CALCULATIONS
-        # -------------------------
+        # Convert to balls
+        balls_bowled = overs_completed * 6 + balls_in_over
+        balls_left = max(120 - balls_bowled, 1)
+
+        overs_float = overs_completed + balls_in_over / 6
+
         runs_left = max(target - score, 0)
-        balls_left = max(120 - int(overs*6), 1)
         wickets_left = 10 - wickets
 
-        crr = score / overs if overs > 0 else 0
-        rrr = (runs_left*6)/balls_left
+        crr = score / overs_float if overs_float > 0 else 0
+        rrr = (runs_left * 6) / balls_left if balls_left > 0 else 0
 
-
+        # ======================================================
+        # DATAFRAME
+        # ======================================================
         row = {
             'batting_team': batting,
             'bowling_team': bowling,
@@ -153,7 +149,9 @@ with right:
             'wickets': wickets_left,
             'total_runs_x': target,
             'crr': crr,
-            'rrr': rrr
+            'rrr': rrr,
+            'pressure': rrr - crr,
+            'runs_per_wicket': runs_left / max(wickets_left,1)
         }
 
         df = pd.DataFrame([row])
@@ -165,38 +163,33 @@ with right:
         win = prob[0][1]
         lose = prob[0][0]
 
-        win_pct = round(win*100,2)
-
+        win_pct = round(win * 100, 2)
+        lose_pct = round(lose * 100, 2)
 
         # ======================================================
-        # ANIMATED WIN BAR
+        # ANIMATION
         # ======================================================
         progress = st.progress(0)
-
         for i in range(int(win_pct)):
             progress.progress(i)
-            time.sleep(0.01)
+            time.sleep(0.005)
 
-
-        # ======================================================
-        # WINNER TEXT
-        # ======================================================
         winner = batting if win > lose else bowling
+        winner_pct = win_pct if win > lose else lose_pct
 
         if win > lose:
             st.markdown(
-                f'<p class="win fade">🏆 {winner} → {win_pct}%</p>',
+                f'<p class="win fade">🏆 {winner} → {winner_pct}%</p>',
                 unsafe_allow_html=True
             )
         else:
             st.markdown(
-                f'<p class="lose fade">🏆 {winner} → {round(lose*100,2)}%</p>',
+                f'<p class="lose fade">🏆 {winner} → {winner_pct}%</p>',
                 unsafe_allow_html=True
             )
 
-
         # ======================================================
-        # GAUGE CHART
+        # GAUGE
         # ======================================================
         fig = go.Figure(go.Indicator(
             mode="gauge+number",
@@ -210,23 +203,21 @@ with right:
 
         st.plotly_chart(fig, use_container_width=True)
 
-
         # ======================================================
         # METRICS
         # ======================================================
-        c1,c2,c3,c4 = st.columns(4)
+        c1, c2, c3, c4 = st.columns(4)
 
         c1.metric("Runs Left", runs_left)
         c2.metric("Balls Left", balls_left)
         c3.metric("CRR", round(crr,2))
         c4.metric("RRR", round(rrr,2))
 
-
         # ======================================================
         # WIN TREND GRAPH
         # ======================================================
         overs_list = np.arange(1,21)
-        curve = np.linspace(20, win_pct, 20)
+        curve = np.linspace(30, win_pct, 20)
 
         fig2 = px.line(
             x=overs_list,

@@ -1,81 +1,62 @@
 # 🏏 IPL Win Probability Predictor
 
-> 🚀 A live Machine Learning web app that predicts **IPL match win probability in real-time** using ball-by-ball match data.
+A **Live Win Probability Prediction App** for IPL matches using real historical data and Machine Learning.
 
-🔗 **Live App:**  
-https://ipl-win-probability-predictor-by-bhuvan.streamlit.app/
-
----
-
-## 📌 Project Overview
-
-Cricket matches are highly dynamic — outcomes change every ball.
-
-This project uses **Machine Learning + Real IPL Data** to estimate:
-
-👉 *Which team is more likely to win at any moment during the chase.*
-
-The app takes live match inputs like:
-
-- Host City
-- Batting Team
-- Bowling Team
-- Target
-- Current Score
-- Overs Completed
-- Wickets Fallen
-
-And instantly predicts:
-
-✅ Win Probability  
-✅ Required Run Rate  
-✅ Current Run Rate  
-✅ Score Projection  
-✅ Win Trend Graphs  
-
-All inside a **modern interactive dashboard**.
+This project predicts the _win probability_ of the team batting second based on current match state (score, overs, wickets, etc.).  
+It also includes a **beautiful interactive dashboard** built with Streamlit.
 
 ---
 
-## ✨ Features
+## 🚀 Live Demo
 
-✅ Real-time win probability prediction  
-✅ Trained on ball-by-ball IPL dataset  
-✅ ~86% model accuracy  
-✅ Modern dark glass UI  
-✅ Animated probability gauge  
-✅ Score projection charts  
-✅ Win trend analytics  
-✅ Team + City selectors  
-✅ Streamlit Cloud deployment  
+👉 **Live App:** https://share.streamlit.io/bhuvanvokkaliga29/ipl-win-probability-predictor/main/app.py
+
+_(Paste your actual deployed URL here once deployed.)_
 
 ---
 
-## 🧠 Machine Learning Details
+## 🧠 Model & Features
 
-### Dataset
-- IPL historical matches
-- Ball-by-ball deliveries
-- 700+ matches
-- 70,000+ records
+✔ Trained on IPL ball-by-ball dataset  
+✔ 86%+ accuracy  
+✔ Real-time win prediction  
+✔ Modern UI with charts and gauge visuals  
+✔ Match stats cards  
+✔ Host city and team selectors  
+✔ Score progression & win trend graphs
 
-### Feature Engineering
-We created meaningful match-state features:
+---
 
-- Runs Left
-- Balls Left
-- Wickets Remaining
-- Current Run Rate (CRR)
-- Required Run Rate (RRR)
-- Target Score
-- City (venue)
-- Batting Team
-- Bowling Team
+## 🗂 Project Structure
 
-### Model
-- Logistic Regression / RandomForest
-- One-Hot Encoding for categorical features
-- Scikit-Learn Pipeline
+ipl-win-probability-predictor/
+│
+├── app.py # Streamlit Web App
+├── pipe.pkl # Trained Model
+├── matches.csv # IPL match data
+├── deliveries.csv # Ball-by-ball data
+├── requirements.txt # Dependencies
+└── model_training.ipynb # Notebook for training
 
-### Accuracy
-Accuracy: ~86%
+---
+
+## 🛠 How to Run Locally
+
+1. **Clone the repository**
+
+```bash
+git clone https://github.com/bhuvanvokkaliga29/ipl-win-probability-predictor.git
+cd ipl-win-probability-predictor
+
+1)Create & activate virtual environment (optional)
+
+python -m venv venv
+venv\Scripts\activate     # Windows
+source venv/bin/activate  # Mac/Linux
+
+2)Install dependencies
+pip install -r requirements.txt
+
+3)Run the Streamlit app
+streamlit run app.py
+```
