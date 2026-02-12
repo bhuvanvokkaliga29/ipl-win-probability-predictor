@@ -16,54 +16,43 @@ st.set_page_config(
 )
 
 # ======================================================
-# DARK PREMIUM UI
+# PREMIUM UI
 # ======================================================
 st.markdown("""
 <style>
-
 .stApp {
     background: linear-gradient(135deg,#0b0f14,#0f172a,#111827);
-    color: white;
+    color:white;
 }
-
 .card {
-    background: rgba(255,255,255,0.06);
-    backdrop-filter: blur(18px);
+    background: rgba(255,255,255,0.05);
+    backdrop-filter: blur(14px);
     padding: 25px;
     border-radius: 20px;
-    box-shadow: 0 0 25px rgba(0,255,150,0.1);
 }
-
 .win {
-    font-size:48px;
-    font-weight:900;
+    font-size:42px;
+    font-weight:800;
     color:#00ff9f;
     text-align:center;
 }
-
 .lose {
-    font-size:48px;
-    font-weight:900;
+    font-size:42px;
+    font-weight:800;
     color:#ff4b4b;
     text-align:center;
 }
-
-.fade {
-    animation: fadein 0.8s ease-in;
-}
-
-@keyframes fadein {
-  from {opacity:0;}
-  to {opacity:1;}
-}
-
 </style>
 """, unsafe_allow_html=True)
 
 # ======================================================
-# LOAD MODEL (Safe)
+# SAFE MODEL LOAD
 # ======================================================
-pipe = pickle.load(open("pipe.pkl", "rb"))
+if not os.path.exists("pipe.pkl"):
+    st.error("❌ Model file 'pipe.pkl' not found. Please upload it.")
+    st.stop()
+
+pipe = pickle.load(open("pipe.pkl","rb"))
 
 # ======================================================
 # CONSTANTS
@@ -82,7 +71,7 @@ cities = [
 # ======================================================
 # TITLE
 # ======================================================
-st.markdown("# 🏏 IPL Win Probability Predictor")
+st.title("🏏 IPL Win Probability Predictor")
 st.markdown("---")
 
 left, right = st.columns([1,2])
@@ -91,7 +80,6 @@ left, right = st.columns([1,2])
 # INPUT PANEL
 # ======================================================
 with left:
-
     st.markdown('<div class="card">', unsafe_allow_html=True)
 
     city = st.selectbox("🏟 Host City", cities)
@@ -106,11 +94,9 @@ with left:
     target = st.slider("🎯 Target Score", 100, 250, 180)
     score = st.slider("🏃 Current Score", 0, target, 80)
 
-    # ==============================
-    # CORRECT CRICKET OVERS LOGIC
-    # ==============================
-    overs_completed = st.slider("Overs Completed", 0, 19, 10)
-    balls_in_over = st.slider("Balls in Current Over", 0, 5, 0)
+    # Proper over input
+    over_number = st.slider("Overs Completed", 0, 19, 10)
+    balls = st.slider("Balls in Current Over", 0, 5, 0)
 
     wickets = st.slider("❌ Wickets Fallen", 0, 9)
 
@@ -125,21 +111,22 @@ with right:
 
     if predict:
 
-        # Convert to balls
-        balls_bowled = overs_completed * 6 + balls_in_over
-        balls_left = max(120 - balls_bowled, 1)
-
-        overs_float = overs_completed + balls_in_over / 6
+        # -----------------------------------
+        # CALCULATIONS
+        # -----------------------------------
+        balls_bowled = over_number * 6 + balls
+        balls_left = 120 - balls_bowled
+        balls_left = max(balls_left, 1)
 
         runs_left = max(target - score, 0)
         wickets_left = 10 - wickets
 
-        crr = score / overs_float if overs_float > 0 else 0
-        rrr = (runs_left * 6) / balls_left if balls_left > 0 else 0
+        crr = score * 6 / balls_bowled if balls_bowled > 0 else 0
+        rrr = runs_left * 6 / balls_left
 
-        # ======================================================
-        # DATAFRAME
-        # ======================================================
+        # -----------------------------------
+        # FEATURE ROW
+        # -----------------------------------
         row = {
             'batting_team': batting,
             'bowling_team': bowling,
@@ -149,48 +136,38 @@ with right:
             'wickets': wickets_left,
             'total_runs_x': target,
             'crr': crr,
-            'rrr': rrr,
-            'pressure': rrr - crr,
-            'runs_per_wicket': runs_left / max(wickets_left,1)
+            'rrr': rrr
         }
 
         df = pd.DataFrame([row])
+
+        # match training structure
         df = df.reindex(columns=pipe.feature_names_in_)
         df = df.fillna(0)
 
+        # -----------------------------------
+        # PREDICT
+        # -----------------------------------
         prob = pipe.predict_proba(df)
-
         win = prob[0][1]
         lose = prob[0][0]
 
         win_pct = round(win * 100, 2)
         lose_pct = round(lose * 100, 2)
 
-        # ======================================================
-        # ANIMATION
-        # ======================================================
-        progress = st.progress(0)
-        for i in range(int(win_pct)):
-            progress.progress(i)
-            time.sleep(0.005)
-
         winner = batting if win > lose else bowling
-        winner_pct = win_pct if win > lose else lose_pct
 
+        # -----------------------------------
+        # WINNER TEXT
+        # -----------------------------------
         if win > lose:
-            st.markdown(
-                f'<p class="win fade">🏆 {winner} → {winner_pct}%</p>',
-                unsafe_allow_html=True
-            )
+            st.markdown(f'<p class="win">🏆 {winner} — {win_pct}%</p>', unsafe_allow_html=True)
         else:
-            st.markdown(
-                f'<p class="lose fade">🏆 {winner} → {winner_pct}%</p>',
-                unsafe_allow_html=True
-            )
+            st.markdown(f'<p class="lose">🏆 {winner} — {lose_pct}%</p>', unsafe_allow_html=True)
 
-        # ======================================================
+        # -----------------------------------
         # GAUGE
-        # ======================================================
+        # -----------------------------------
         fig = go.Figure(go.Indicator(
             mode="gauge+number",
             value=win_pct,
@@ -203,27 +180,41 @@ with right:
 
         st.plotly_chart(fig, use_container_width=True)
 
-        # ======================================================
+        # -----------------------------------
         # METRICS
-        # ======================================================
-        c1, c2, c3, c4 = st.columns(4)
+        # -----------------------------------
+        c1,c2,c3,c4 = st.columns(4)
 
         c1.metric("Runs Left", runs_left)
         c2.metric("Balls Left", balls_left)
         c3.metric("CRR", round(crr,2))
         c4.metric("RRR", round(rrr,2))
 
-        # ======================================================
+        # -----------------------------------
         # WIN TREND GRAPH
-        # ======================================================
-        overs_list = np.arange(1,21)
-        curve = np.linspace(30, win_pct, 20)
+        # -----------------------------------
+        overs_range = np.arange(1,21)
+        trend = np.linspace(20, win_pct, 20)
 
         fig2 = px.line(
-            x=overs_list,
-            y=curve,
-            title="Win Probability Trend",
-            labels={"x":"Overs","y":"Win %"}
+            x=overs_range,
+            y=trend,
+            labels={"x":"Overs","y":"Win %"},
+            title="Win Probability Trend"
         )
 
         st.plotly_chart(fig2, use_container_width=True)
+
+        # -----------------------------------
+        # SCORE PROJECTION
+        # -----------------------------------
+        projected = [score + i*(crr) for i in overs_range]
+
+        fig3 = px.line(
+            x=overs_range,
+            y=projected,
+            labels={"x":"Overs","y":"Projected Score"},
+            title="Projected Score Curve"
+        )
+
+        st.plotly_chart(fig3, use_container_width=True)
